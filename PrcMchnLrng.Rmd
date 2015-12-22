@@ -1,0 +1,74 @@
+---
+title: "Practical Machine Learning Assignment"
+author: "AdrianThong"
+date: "December 18, 2015"
+output: html_document
+---
+
+Using the train and test set below, predict the manner in which the group of enthusiasts did the exercises, the outcome is the variable CLASSE. At the end, the prediction model will be ran against the testing dataset. 
+[https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)   
+[https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)  
+```{r, echo = FALSE, results = 'hide', message = FALSE}
+# Change the work directory 
+setwd("C:/Apps/Datascience/WorkDir/ds.c8.practicalmachinelearning/assignment")
+
+# Load the libraries
+library(caret) 
+library(randomForest)
+library(gbm)
+library(doParallel)
+```
+
+A simple data exploratory shows many invalid values like blanks, NA and #DIV/0!. So when reading the csv files, these values will be converted as NA. There is a total of 160 variables. For data clean up, the first 7 variables are removed as they are obviously not the predictors or the outcome. Other variables that have NA values are also removed since substitution is not viable and having NA values will make the variable irrelevant to the prediction. That leaves a clean training set of 19,622 lines with 52 variables, 1 outcome to build the prediction model, 107 variables have been removed from the dataset due to incomplete data or irrelevant. Same logic is applied to the testing dataset as well. 
+```{r, echo = TRUE}
+# Load the training and testing files
+training <- read.csv(file = "pml-training.csv", na.strings = c('','NA','#DIV/0!'))
+testing <- read.csv(file = "pml-testing.csv", na.strings = c('','NA','#DIV/0!'))
+
+# Remove non predictor variables 
+training <- training[,-c(1:7)] 
+testing <- testing[,-c(1:7)] 
+
+# Remove variables that is all NA  
+training <- training[,colSums(is.na(training)) == 0]
+testing <- testing[,colSums(is.na(testing)) == 0] 
+```
+
+The training dataset will be split 60:40 into sub-training and sub-testing dataset to generate a predictive model. 
+```{r, echo = TRUE}
+# Set seed
+set.seed(8888)
+
+inTrain = createDataPartition(y = training$classe, p = 0.6, list = FALSE)
+subTraining = training[inTrain,]
+subTesting = training[-inTrain,]
+```
+
+To generate a model based on the sub-training dataset. We will be using 2 algorithm to build a predictive model and then perform a cross validation with the sub-testing dataset. The 2 algorithms are the Random Forest and the Generalized Boosted Regression Models. 
+
+We run the dataset through the Random Forest algorithm.We analyze the accuracy using the confusionMatrix. 
+```{r, echo = FALSE, results = 'hide', message = FALSE}
+cl <- makeCluster(detectCores())
+registerDoParallel(cl)
+modFitRF <- train(classe ~ ., data = subTraining, method = 'rf')
+modFitGBM <- train(classe ~ ., data = subTraining, method = 'gbm')
+stopCluster(cl)
+```
+```{r, echo = TRUE}
+PredictmodRF <- predict(modFitRF, subTesting)
+confusionMatrix(PredictmodRF, subTesting$classe)
+```
+
+We run the dataset through the Generalized Boosted Regression Models. We analze the accuracy using the confusionMatrix.
+```{r, echo = TRUE}
+PredictmodGBM <- predict(modFitGBM, subTesting)
+confusionMatrix(PredictmodGBM, subTesting$classe)
+```
+
+Random Forest algorithm has an accuracy rate of more than 99% while the Generalized Boosted Regression Models has an accuracy rate of 96%. So Random Forest algorithm produce a better prediction model. Out of sample error is estimated at less than 1% or 1 - accuracy for the Random Forest algorithm made against the cross-validation set. 
+
+Using the Random Forest prediction model against the Testing dataset of 20 cases. The results are;
+```{r, echo = TRUE}
+PredictFinal <- predict(modFitRF, newdata = testing)
+PredictFinal
+```
